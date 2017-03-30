@@ -1,173 +1,368 @@
 #include <iostream>
+#include <vector>
+#include <cstdlib>
 #include "Environment.h"
 using namespace std;
 
 // constructor fuction
-Environment::Environment(int num_x_cells, int num_y_cells)
-// member initializer list
-:	grid_width_(num_x_cells),
-	grid_height_(num_y_cells){
+Environment::Environment():
+// members initialization list
+grid_dimensions_(2, 0),
+agent_grid_position_(2, 0),
+point_a_grid_position_(2, 0),
+point_b_grid_position_(2, 0),
+point_c_grid_position_(2, 0),
+point_d_grid_position_(2, 0),
+wall_grid_position_(6, std::vector<int>(2, 0))
+{
+	// Manually initialize the vector type variables
+	grid_dimensions_[0] = 5;
+	grid_dimensions_[1] = 5;
+
+	// Positions of points a, b, c and d
+	point_a_grid_position_[0] = 0;
+	point_a_grid_position_[1] = 0;
+	point_b_grid_position_[0] = 0;
+	point_b_grid_position_[1] = 4;
+	point_c_grid_position_[0] = 3;
+	point_c_grid_position_[1] = 0;
+	point_d_grid_position_[0] = 4;
+	point_d_grid_position_[1] = 4;
+
+	// Specify positions of walls, in this case 6, from left to right
+	// and bottom to top
+	wall_grid_position_[0][0] = 0;
+	wall_grid_position_[0][1] = 0;
+	wall_grid_position_[1][0] = 0;
+	wall_grid_position_[1][1] = 1;
+	wall_grid_position_[2][0] = 1;
+	wall_grid_position_[2][1] = 3;
+	wall_grid_position_[3][0] = 1;
+	wall_grid_position_[3][1] = 4;
+	wall_grid_position_[4][0] = 2;
+	wall_grid_position_[4][1] = 0;
+	wall_grid_position_[5][0] = 2;
+	wall_grid_position_[5][1] = 1;
+
+	// Reset the passenger location and goal
+	ResetPassenger();
 }
 
-// ApplyAction function
-void Environment::ApplyAction(int world_action){
-	// update the agents location
-	UpdateAgentLocation(world_action);
+// Function to take the primitive action selected in the world
+void Environment::TakeWorldAction(int primitive_action_index){
+	// Placeholder variable to the new position and 
+	// initialize as the current position
+	std::vector<int> new_position = agent_grid_position_;
 
-	// calcualte the reward_ for the transition
-	CalculateReward();
+	switch(primitive_action_index){
+		// Move up
+		case 0:
+		// Update the new position
+		new_position[1] = agent_grid_position_[1] + 1;
 
-	// check if the episode is ended
-	CheckEpisodeEnd();
+		// Check if agent crashes
+		CheckWallCrash(primitive_action_index, new_position);
+
+		if(wall_crash_){
+			// Do nothing
+		}else{
+			SetAgentGridPosition(new_position);
+		}
+		break;
+
+		// Move down
+		case 1:
+		// Update the new position
+		new_position[1] = agent_grid_position_[1] - 1;
+
+		// Check if agent crashes
+		CheckWallCrash(primitive_action_index, new_position);
+
+		if(wall_crash_){
+			// Do nothing
+		}else{
+			SetAgentGridPosition(new_position);
+		}
+		break;
+
+		// Move left
+		case 2:
+		// Update the new position
+		new_position[0] = agent_grid_position_[0] - 1;
+
+		// Check if agent crashes
+		CheckWallCrash(primitive_action_index, new_position);
+
+		if(wall_crash_){
+			// Do nothing
+		}else{
+			SetAgentGridPosition(new_position);
+		}
+		break;
+
+		// Move right
+		case 3:
+		// Update the new position
+		new_position[0] = agent_grid_position_[0] + 1;
+
+		// Check if agent crashes
+		CheckWallCrash(primitive_action_index, new_position);
+
+		if(wall_crash_){
+			// Do nothing
+		}else{
+			SetAgentGridPosition(new_position);
+		}
+		break;
+
+		// Get the passenger
+		case 4:
+		AttemptGet();
+		break;
+
+		// Put the passenger
+		case 5:
+		AttemptPut();
+		break;
+	}
+
+	// Calculate reward
 }
 
-// CalculateReward function
-void Environment::CalculateReward(){
-	// define reward_ according to agents position
-	if(agent_x_position_ == goal_x_position_ && agent_y_position_ == goal_y_position_){
-		// goal reached
-		this->reward_ = 0;
-	}else{
-		// not yet at goal
-		this->reward_ = -1;
+// Checks if the current agent position coincides with the passenger location
+void Environment::AttemptGet(){
+	// Check if agent is at the goal position and passenger is in the taxi
+	if(agent_grid_position_[0] == passenger_grid_position_[0] &&
+	   agent_grid_position_[1] == passenger_grid_position_[1] &&
+	   passenger_in_taxi_ == false){
+		SetPassengerInTaxi(true);
+	} else{
+		SetPassengerInTaxi(false);
 	}
 }
 
-// UpdateAgentLocation function
-void Environment::UpdateAgentLocation(int world_action){
-	// placeholder variable
-	int new_position;
+// Checks if the current agent position coincides with the goal location and
+// if the passenger is on board
+void Environment::AttemptPut(){
+	// Check if agent is at the goal position and passenger is in the taxi
+	if(agent_grid_position_[0] == goal_grid_position_[0] &&
+	   agent_grid_position_[1] == goal_grid_position_[1] &&
+	   passenger_in_taxi_ == true){
+		SetSuccesfullPut(true);
+		ResetPassenger();
+	} else{
+		SetSuccesfullPut(false);
+	}
+}
 
-	switch(world_action){
-		// move up
+// Checks if the agent crashes into a wall
+void Environment::CheckWallCrash(int primitive_action_index, std::vector<int> new_position){
+	// Switch over the primitve action indexes
+	switch(primitive_action_index){
+		// Move up
 		case 0:
-		new_position = agent_y_position_ + 1; 
-		if(new_position < 0 || new_position > grid_height_-1){
-			// do nothing
-		}else{
-			SetAgentGridPosition(agent_x_position_, new_position);
+		if(new_position[1] >= grid_dimensions_[1]){
+			// Crashed in top wall
+			SetWallCrash(true);
+		} else {
+			SetWallCrash(false);
 		}
 		break;
 
-		// move down
+		// Move down
 		case 1:
-		new_position = agent_y_position_ - 1; 
-		if(new_position < 0 || new_position > grid_height_-1){
-			// do nothing
+		if(new_position[1] < 0){
+			// Crashed in bottom wall
+			SetWallCrash(true);
 		}else{
-			SetAgentGridPosition(agent_x_position_, new_position);
+			SetWallCrash(false);
 		}
 		break;
 
-		// move left
+		// Move left
 		case 2:
-		new_position = agent_x_position_ - 1; 
-		if(new_position < 0 || new_position > grid_width_-1){
-			// do nothing
-		}else{
-			SetAgentGridPosition(new_position, agent_y_position_);
+		if(new_position[0] < 0){
+			// Crashed in left wall
+			SetWallCrash(true);
+		} else{
+			// Loop over all free standing walls
+			for(int k = 0; k < wall_grid_position_.size(); k++){
+				// Check if current position of agent was to the right of a wall
+				if(agent_grid_position_[0] == wall_grid_position_[k][0]+1 &&
+				   agent_grid_position_[1] == wall_grid_position_[k][1]){
+					SetWallCrash(true);
+					break;
+				} else{
+					SetWallCrash(false);
+				}
+			}
 		}
+		break;
+
+		// Move right
+		case 3:
+		if(new_position[0] >= grid_dimensions_[0]){
+			// Crashed in right wall
+			SetWallCrash(true);
+		} else{
+			// Loop over all free standing walls
+			for(int k = 0; k < wall_grid_position_.size(); k++){
+				// Check if current position of agent was to the left of a wall
+				if(agent_grid_position_[0] == wall_grid_position_[k][0] &&
+				   agent_grid_position_[1] == wall_grid_position_[k][1]){
+					SetWallCrash(true);
+					break;
+				} else{
+					SetWallCrash(false);
+				}
+			}
+		}
+		// Get passenger
+		case 4:
+		// Do nothing
+		break;
+
+		// Put passenger
+		case 5:
+		break;
+		// Do nothing
+	}
+}
+
+// Resets the pasenger location and goal to a random position
+void Environment::ResetPassenger(){
+	// Select a random passenger- and goal location
+	do{
+		passenger_location_index_ = rand()%3;
+		passenger_goal_location_index_ = rand()%3;
+	} while(passenger_location_index_ == passenger_goal_location_index_);
+
+	SetPassengerGridPosition();
+	SetGoalGridPosition();
+	SetPassengerInTaxi(false);
+}
+
+// Sets the passenger location
+void Environment::SetPassengerGridPosition(){
+	switch (passenger_location_index_){
+		case 0:
+		// Set passenger position to point a
+		this->passenger_grid_position_ = point_a_grid_position_;
 		break;
 		
-		// move right
+		case 1:
+		// Set passenger position to point b
+		this->passenger_grid_position_ = point_b_grid_position_;
+		break;
+		
+		case 2:
+		// Set passenger position to point c
+		this->passenger_grid_position_ = point_c_grid_position_;
+		break;
+
 		case 3:
-		new_position = agent_x_position_ + 1; 
-		if(new_position < 0 || new_position > grid_width_-1){
-			// do nothing
-		}else{
-			SetAgentGridPosition(new_position, agent_y_position_);
-		}
+		// Set passenger position to point d
+		this->passenger_grid_position_ = point_d_grid_position_;
 	}
 }
 
-// ResetEnvironment function
-void Environment::ResetEnvironment(){
-	// set the agent grid position back to the start position
-	SetAgentGridPosition(agent_start_x_position_, agent_start_y_position_);
-}
+// Sets the goal location
+void Environment::SetGoalGridPosition(){
+	switch (passenger_goal_location_index_){
+		case 0:
+		// Set passenger position to point a
+		this->goal_grid_position_ = point_a_grid_position_;
+		break;
+		
+		case 1:
+		// Set passenger position to point b
+		this->goal_grid_position_ = point_b_grid_position_;
+		break;
+		
+		case 2:
+		// Set passenger position to point c
+		this->goal_grid_position_ = point_c_grid_position_;
+		break;
 
-
-// CheckEpisodeEnd function
-void Environment::CheckEpisodeEnd(){
-	// check if goal position is reached
-	if(agent_x_position_ == goal_x_position_ && agent_y_position_ == goal_y_position_){
-		this->episode_end_ = 1;
-	} else{
-		this->episode_end_ = 0;
+		case 3:
+		// Set passenger position to point d
+		this->goal_grid_position_ = point_d_grid_position_;
 	}
 }
 
-// UpdateState function
-void Environment::UpdateState(){
-	// placeholder for state
-	int s;	
-
-	// calculate the state index, starting at zero in the bottom left corner
-	// and increasig row wise from bottom to top
-	s = agent_x_position_ + (agent_y_position_)*grid_width_;
-	
-	// set the state
-	this->state_index_ = s;
-}
-
-// SetAgentGridPosition function
-void Environment::SetAgentGridPosition(int grid_x_position, int grid_y_position){
+// set the agent grid position and updates the state
+void Environment::SetAgentGridPosition(std::vector <int> new_agent_grid_position){
 	// set the class variables
-	this->agent_x_position_ = grid_x_position;
-	this->agent_y_position_ = grid_y_position;
+	this->agent_grid_position_ = new_agent_grid_position;
 
 	// update the state
-	UpdateState();
+	// UpdateState();
 }
 
-// SetAgentStartGridPosition function
-void Environment::SetAgentStartGridPosition(int grid_x_position, int grid_y_position){
-	// set the class variables
-	this->agent_start_x_position_ = grid_x_position;
-	this->agent_start_y_position_ = grid_y_position;
+void Environment::SetWallCrash(bool wall_crash){
+	this->wall_crash_ = wall_crash;
 }
 
-// SetGoalGridPosition function
-void Environment::SetGoalGridPosition(int grid_x_position, int grid_y_position){
-	// set the class variables
-	this->goal_x_position_ = grid_x_position;
-	this->goal_y_position_ = grid_y_position;
+void Environment::SetSuccesfullPut(bool succesfull_put){
+	this->succesfull_put_ = succesfull_put;
 }
 
-// GetStateIndex fuction
-int Environment::GetStateIndex(){
-	// get the state
-	int s = this->state_index_;
-	return s;	
+void Environment::SetPassengerInTaxi(bool passenger_in_taxi){
+	this->passenger_in_taxi_= passenger_in_taxi;
 }
 
-// GetReward function
-int Environment::GetReward(){
- 	// get the reward
- 	int r = this->reward_;
-	return r;		
-}
 
-// ApplyAction function
-int Environment::GetEpisodeEnd(){
-	// get the episode_end_ booloean
-	int episode_e = this->episode_end_;
-	return episode_e;
-}
-
-// PrintGrid function
+// prints out the grid in the terminal
 void Environment::PrintGrid(){
-	// loop over the height of the grid, top down
-	for(int i = (grid_height_-1); i >= 0; i--){
-		// loop over the width of the grid, left to right
-		for(int j = 0; j < grid_width_; j++){
+	// initialise print_wall boolean
+	int print_wall;
 
-			if(i == agent_y_position_ && j == agent_x_position_){
+	// loop over the height of the grid, top down
+	for(int i = (grid_dimensions_[1]-1); i >= 0; i--){
+		// loop over the width of the grid, left to right
+		for(int j = 0; j < grid_dimensions_[0]; j++){
+			// print grid cell contents
+			if(i == agent_grid_position_[1] && j == agent_grid_position_[0]){
+				// print agent
 				cout << " A ";
-			}else if(i == goal_y_position_ && j == goal_x_position_){
+			} else if(i == passenger_grid_position_[1] && j == passenger_grid_position_[0] &&
+				      passenger_in_taxi_ == 0){
+				// print passenger
+				cout << " P ";
+			} else if(i == goal_grid_position_[1] && j == goal_grid_position_[0]){
+				// print goal
 				cout << " G ";
-			}else{
+			} else if(i == point_a_grid_position_[1] && j == point_a_grid_position_[0]){
+				// print a
+				cout << " a ";
+			} else if(i == point_b_grid_position_[1] && j == point_b_grid_position_[0]){
+				// print b
+				cout << " b ";
+			} else if(i == point_c_grid_position_[1] && j == point_c_grid_position_[0]){
+				// print c
+				cout << " c ";
+			} else if(i == point_d_grid_position_[1] && j == point_d_grid_position_[0]){
+				// print d
+				cout << " d ";
+			} else {
+				// print 0
 				cout << " 0 ";
+			}
+
+			// check if current cell has wall to the right
+			print_wall = 0;
+			for(int k = 0; k < wall_grid_position_.size(); k++){
+				if(i == wall_grid_position_[k][1] && j == wall_grid_position_[k][0]){
+					print_wall = 1;
+					break;
+				} 
+			}
+
+			// print walls
+			if(print_wall == 1){
+				cout << "|";
+			} else{
+				cout << " ";
 			}
 		}
 		cout << endl;
@@ -176,7 +371,6 @@ void Environment::PrintGrid(){
 
 // deconstructer function
 Environment::~Environment(){
-
 }
 
 
